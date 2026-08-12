@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const clientId = process.env.GOOGLE_CLIENT_ID;
+  const refCode = url.searchParams.get('ref') || '';
 
   if (!clientId || clientId.trim() === '') {
     return NextResponse.json(
@@ -21,6 +22,9 @@ export async function GET(req: Request) {
   googleAuthUrl.searchParams.append('response_type', 'code');
   googleAuthUrl.searchParams.append('scope', 'openid email profile');
   googleAuthUrl.searchParams.append('prompt', 'select_account');
+  if (refCode) {
+    googleAuthUrl.searchParams.append('state', encodeURIComponent(refCode));
+  }
 
   return NextResponse.redirect(googleAuthUrl.toString());
 }

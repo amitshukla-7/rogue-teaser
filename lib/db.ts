@@ -8,6 +8,9 @@ export interface PreRegUser {
   created_at: string;
   founder_badge: string;
   google_id?: string;
+  ref_code?: string;
+  referred_by?: string;
+  referral_count?: number;
 }
 
 // Global serverless connection singleton to prevent pool exhaustion on Supabase
@@ -34,6 +37,18 @@ function getBadgeLabel(position: number): string {
     : `Early Access #${String(position).padStart(3, '0')}`;
 }
 
+async function ensureReferralColumns() {
+  if (!pool) return;
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS ref_code TEXT;
+    `);
+  } catch (err) {
+    console.error('PostgreSQL ensureReferralColumns note:', err);
+  }
+}
+
 export async function getPreRegistrationCount(): Promise<number> {
   if (pool) {
     try {
@@ -49,9 +64,30 @@ export async function getPreRegistrationCount(): Promise<number> {
 export async function getPreRegistrations(): Promise<PreRegUser[]> {
   if (pool) {
     try {
-      const res = await pool.query('SELECT id, name, email, google_id, created_at FROM users ORDER BY created_at ASC LIMIT 500');
+      await ensureReferralColumns();
+      const res = await pool.query(`
+        SELECT 
+          u.id, 
+          u.name, 
+          u.email, 
+          u.google_id, 
+          u.created_at, 
+          u.referred_by, 
+          u.ref_code,
+          (
+            SELECT COUNT(*)::int 
+            FROM users r 
+            WHERE LOWER(r.referred_by) = LOWER(u.email) 
+               OR (u.ref_code IS NOT NULL AND LOWER(r.referred_by) = LOWER(u.ref_code))
+          ) AS referral_count
+        FROM users u
+        ORDER BY created_at ASC 
+        LIMIT 500
+      `);
+
       return res.rows.map((row, index) => {
         const position = index + 1;
+        const generatedCode = row.ref_code || `ROGUE-${row.email.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
         return {
           id: row.id,
           name: row.name || row.email.split('@')[0],
@@ -59,7 +95,10 @@ export async function getPreRegistrations(): Promise<PreRegUser[]> {
           position,
           created_at: row.created_at,
           founder_badge: getBadgeLabel(position),
-          google_id: row.google_id
+          google_id: row.google_id,
+          ref_code: generatedCode,
+          referred_by: row.referred_by || 'Direct / Organic',
+          referral_count: parseInt(row.referral_count || '0', 10)
         };
       });
     } catch (err) {
@@ -69,24 +108,35 @@ export async function getPreRegistrations(): Promise<PreRegUser[]> {
   return [];
 }
 
-export async function addPreRegistration(email: string, name?: string, googleId?: string): Promise<PreRegUser> {
+export async function addPreRegistration(email: string, name?: string, googleId?: string, referredBy?: string): Promise<PreRegUser> {
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = name || cleanEmail.split('@')[0].replace('.', ' ');
+  const cleanRefCode = `ROGUE-${cleanEmail.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
+  const cleanReferredBy = referredBy ? referredBy.trim() : null;
 
   if (pool) {
     try {
+      await ensureReferralColumns();
+
       // Check existing user
       const checkRes = await pool.query(
-        'SELECT id, name, email, google_id, created_at FROM users WHERE LOWER(email) = $1',
+        'SELECT id, name, email, google_id, created_at, referred_by, ref_code FROM users WHERE LOWER(email) = $1',
         [cleanEmail]
       );
 
       if (checkRes.rows.length > 0) {
         const existing = checkRes.rows[0];
-        // Calculate position via indexed COUNT query
+        // If existing user has no referred_by, update it if a new referral code came in
+        if (!existing.referred_by && cleanReferredBy) {
+          await pool.query('UPDATE users SET referred_by = $1 WHERE id = $2', [cleanReferredBy, existing.id]);
+        }
+        if (!existing.ref_code) {
+          await pool.query('UPDATE users SET ref_code = $1 WHERE id = $2', [cleanRefCode, existing.id]);
+        }
+
         const posRes = await pool.query(
-          'SELECT COUNT(*)::int AS position FROM users WHERE created_at <= $1',
-          [existing.created_at]
+          'SELECT COUNT(*)::int AS position FROM users WHERE created_at < $1 OR (created_at = $1 AND id <= $2)',
+          [existing.created_at, existing.id]
         );
         const position = Math.max(1, posRes.rows[0]?.position || 1);
 
@@ -97,7 +147,9 @@ export async function addPreRegistration(email: string, name?: string, googleId?
           position,
           created_at: existing.created_at,
           founder_badge: getBadgeLabel(position),
-          google_id: existing.google_id
+          google_id: existing.google_id,
+          ref_code: existing.ref_code || cleanRefCode,
+          referred_by: existing.referred_by || cleanReferredBy || 'Direct / Organic'
         };
       }
 
@@ -105,19 +157,21 @@ export async function addPreRegistration(email: string, name?: string, googleId?
       let newUserRow;
       try {
         const insertRes = await pool.query(
-          `INSERT INTO users (email, name, google_id, college_verified)
-           VALUES ($1, $2, $3, true)
+          `INSERT INTO users (email, name, google_id, college_verified, referred_by, ref_code)
+           VALUES ($1, $2, $3, true, $4, $5)
            ON CONFLICT (email) DO UPDATE
              SET google_id = COALESCE(EXCLUDED.google_id, users.google_id),
-                 name = COALESCE(users.name, EXCLUDED.name)
-           RETURNING id, created_at`,
-          [cleanEmail, cleanName, googleId || `google_${Date.now()}`]
+                 name = COALESCE(users.name, EXCLUDED.name),
+                 referred_by = COALESCE(users.referred_by, EXCLUDED.referred_by),
+                 ref_code = COALESCE(users.ref_code, EXCLUDED.ref_code)
+           RETURNING id, created_at, referred_by, ref_code`,
+          [cleanEmail, cleanName, googleId || `google_${Date.now()}`, cleanReferredBy, cleanRefCode]
         );
         newUserRow = insertRes.rows[0];
       } catch (insertErr) {
         // Fallback for schemas without UNIQUE constraint on email
         const retryCheck = await pool.query(
-          'SELECT id, name, email, google_id, created_at FROM users WHERE LOWER(email) = $1',
+          'SELECT id, name, email, google_id, created_at, referred_by, ref_code FROM users WHERE LOWER(email) = $1',
           [cleanEmail]
         );
         if (retryCheck.rows.length > 0) {
@@ -128,8 +182,8 @@ export async function addPreRegistration(email: string, name?: string, googleId?
       }
 
       const countRes = await pool.query(
-        'SELECT COUNT(*)::int AS position FROM users WHERE created_at <= $1',
-        [newUserRow.created_at]
+        'SELECT COUNT(*)::int AS position FROM users WHERE created_at < $1 OR (created_at = $1 AND id <= $2)',
+        [newUserRow.created_at, newUserRow.id]
       );
       const position = Math.max(1, countRes.rows[0]?.position || 1);
 
@@ -140,7 +194,9 @@ export async function addPreRegistration(email: string, name?: string, googleId?
         position,
         created_at: newUserRow.created_at,
         founder_badge: getBadgeLabel(position),
-        google_id: googleId
+        google_id: googleId,
+        ref_code: newUserRow.ref_code || cleanRefCode,
+        referred_by: newUserRow.referred_by || cleanReferredBy || 'Direct / Organic'
       };
     } catch (err) {
       console.error('PostgreSQL addPreRegistration error:', err);

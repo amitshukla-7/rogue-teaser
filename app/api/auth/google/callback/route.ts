@@ -6,6 +6,8 @@ import { sendErrorAlert } from '@/lib/alert';
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
+  const rawState = url.searchParams.get('state');
+  const referredBy = rawState ? decodeURIComponent(rawState) : undefined;
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -67,7 +69,7 @@ export async function GET(req: Request) {
 
   // Save verified user to pre-registration DB
   try {
-    const user = await addPreRegistration(userEmail, name, googleId);
+    const user = await addPreRegistration(userEmail, name, googleId, referredBy);
     const response = NextResponse.redirect(`${url.origin}/?registered=true&email=${encodeURIComponent(userEmail)}&position=${user.position}`);
     response.cookies.set('pre_reg_email', userEmail, { path: '/', httpOnly: false, maxAge: 60 * 60 * 24 * 30 });
     return response;

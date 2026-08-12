@@ -51,6 +51,8 @@ export default function TeaserPage() {
   const [submittedPosition, setSubmittedPosition] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [incomingRefCode, setIncomingRefCode] = useState<string>('');
   const [error, setError] = useState('');
 
   // COUNTDOWN TIMER TO AUGUST 20, 2026 12:00 PM
@@ -72,9 +74,15 @@ export default function TeaserPage() {
     calculateCountdown();
     const interval = setInterval(calculateCountdown, 1000);
 
-    // Check if returning from Google OAuth callback
+    // Check if returning from Google OAuth callback or has referral param
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+      const refParam = params.get('ref') || localStorage.getItem('rogue_ref_code') || '';
+      if (refParam) {
+        setIncomingRefCode(refParam);
+        localStorage.setItem('rogue_ref_code', refParam);
+      }
+
       const urlError = params.get('error');
       if (urlError) {
         setError(decodeURIComponent(urlError));
@@ -179,13 +187,27 @@ export default function TeaserPage() {
     setLoading(true);
     setError('');
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
-    window.location.href = backendUrl ? `${backendUrl}/api/auth/google` : '/api/auth/google';
+    const activeRef = incomingRefCode || (typeof window !== 'undefined' ? localStorage.getItem('rogue_ref_code') || '' : '');
+    const refQuery = activeRef ? `?ref=${encodeURIComponent(activeRef)}` : '';
+    window.location.href = backendUrl ? `${backendUrl}/api/auth/google${refQuery}` : `/api/auth/google${refQuery}`;
   };
 
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://rogue.edu';
+  const userRefCode = userEmail
+    ? `ROGUE-${userEmail.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '')}`
+    : 'ROGUE-FOUNDER';
+
+  const referralUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}?ref=${userRefCode}`
+    : `https://rogue.edu?ref=${userRefCode}`;
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(userRefCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2500);
+  };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(`Hey! Join me on Rogue — the exclusive platform for our campus launching Aug 20! Pre-register now to unlock a permanent Founding Member badge: ${shareUrl}`);
+    navigator.clipboard.writeText(`Hey! Join me on Rogue — the exclusive platform for our campus launching Aug 20! Use my invite code ${userRefCode} to unlock your Founding Member status: ${referralUrl}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -888,46 +910,84 @@ export default function TeaserPage() {
         <div id="register" className="w-full max-w-lg bg-[#0F1018] border border-[#232635] rounded-3xl p-6 sm:p-8 shadow-2xl relative space-y-6 scroll-mt-24">
           
           {submittedPosition ? (
-            /* SUCCESS CONFIRMATION & REFERRAL GROWTH ENGINE */
-            <div className="space-y-6 animate-fadeIn">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-teal/20 border border-teal/40 rounded-2xl flex items-center justify-center mx-auto text-teal shadow-lg shadow-teal/20">
-                <Check className="w-8 h-8 sm:w-10 sm:h-10" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-2xl sm:text-3xl font-bold text-white font-fraunces">You're On The List!</h3>
-                <p className="text-sm text-text-muted leading-relaxed">
-                  You are officially <strong className="text-coral font-bold text-base">#{submittedPosition}</strong> on your campus waitlist. We'll grant access to <span className="text-teal font-mono break-all">{userEmail}</span> on <strong className="text-white">Aug 20 at 12:00 PM</strong>!
-                </p>
-              </div>
-
-              {/* Share Card */}
-              <div className="bg-[#06070B] border border-[#232635] rounded-2xl p-4 sm:p-5 space-y-3.5 text-left">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-amber-300 flex items-center gap-1.5">
-                    <Zap className="w-4 h-4 fill-amber-300 shrink-0" /> Secure Your Top 100 Spot
-                  </span>
-                  <span className="text-xs text-text-muted">Invite Link</span>
+            /* SUCCESS CONFIRMATION & VIRAL REFERRAL HUB */
+            <div className="space-y-6 animate-fadeIn text-left">
+              <div className="text-center space-y-3">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-teal/20 border border-teal/40 rounded-2xl flex items-center justify-center mx-auto text-teal shadow-lg shadow-teal/20">
+                  <Check className="w-8 h-8 sm:w-10 sm:h-10" />
                 </div>
-                <p className="text-xs text-text-muted leading-relaxed">
-                  Share Rogue with 3 college friends to ensure you get one of the 100 permanent Founding Member badges!
-                </p>
 
-                <div className="flex gap-2 pt-1">
+                <div className="space-y-1">
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white font-fraunces">You're On The List!</h3>
+                  <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
+                    You are officially <strong className="text-coral font-bold text-base">#{submittedPosition}</strong> on your campus waitlist. Access code sent to <span className="text-teal font-mono break-all">{userEmail}</span> on <strong className="text-white">Aug 20</strong>!
+                  </p>
+                </div>
+              </div>
+
+              {/* PERSONAL REFERRAL CODE & LINK HUB */}
+              <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-semibold text-text-muted uppercase tracking-wider">
+                    Invite Link & Code
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20">
+                    Active
+                  </span>
+                </div>
+
+                {/* REFERRAL CODE DISPLAY BOX */}
+                <div className="flex items-center gap-2 bg-[#0E101A] border border-[#1E2130] rounded-xl p-2.5">
+                  <span className="text-sm sm:text-base font-mono font-semibold text-white tracking-wider px-2 select-all flex-1">
+                    {userRefCode}
+                  </span>
+                  <button
+                    onClick={handleCopyCode}
+                    className="px-3 py-1.5 rounded-lg bg-[#181A2A] hover:bg-[#22253B] border border-[#232635] text-white text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-text-muted" />}
+                    <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+
+                {/* 1-CLICK SHARE ACTIONS (WHATSAPP + COPY LINK) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                   <button
                     onClick={handleCopyLink}
-                    className="w-full py-3.5 px-4 rounded-xl bg-coral hover:bg-coral-hover text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-coral/20"
+                    className="w-full py-2.5 px-3 rounded-xl bg-coral hover:bg-coral-hover text-white text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {copied ? (
                       <>
-                        <Check className="w-4 h-4" /> Link Copied to Clipboard!
+                        <Check className="w-3.5 h-3.5" /> Link Copied
                       </>
                     ) : (
                       <>
-                        <Copy className="w-4 h-4" /> Copy Invite Link & Share
+                        <Copy className="w-3.5 h-3.5" /> Copy Invite Link
                       </>
                     )}
                   </button>
+
+                  <a
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                      `Hey! I just pre-registered for Rogue — our official campus network launching Aug 20! 🚀 Pre-register using my code ${userRefCode} to unlock Founding Member access: ${referralUrl}`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] border border-[#25D366]/30 text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 fill-[#25D366]" /> Share on WhatsApp
+                  </a>
+                </div>
+              </div>
+
+              {/* SLEEK MATTE AMBASSADOR & CORE TEAM NOTE */}
+              <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-4 text-left flex items-start gap-3">
+                <Crown className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-semibold text-white">Campus Ambassador & Core Team Opportunity</h4>
+                  <p className="text-[11px] text-text-muted leading-relaxed">
+                    Most active sharers get a direct opportunity to join the Rogue Core Admin Team & represent Rogue at their college.
+                  </p>
                 </div>
               </div>
             </div>
@@ -936,7 +996,27 @@ export default function TeaserPage() {
             <div className="space-y-5 text-center">
               <div className="space-y-1.5">
                 <h3 className="text-xl sm:text-2xl font-bold text-white font-fraunces">Pre-Register with College Email</h3>
-                
+              </div>
+
+              {/* ACTIVE REFERRAL BANNER IF REFERRED */}
+              {incomingRefCode && (
+                <div className="p-3 rounded-xl bg-teal/10 border border-teal/30 text-teal text-xs font-mono font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 fill-teal" /> Invite Code Active:
+                  </span>
+                  <span className="bg-teal/20 px-2 py-0.5 rounded text-white">{incomingRefCode}</span>
+                </div>
+              )}
+
+              {/* SLEEK MATTE PRE-LOGIN NOTE */}
+              <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-3.5 text-left flex items-start gap-3">
+                <Crown className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-semibold text-white">Campus Lead & Admin Team</h4>
+                  <p className="text-[11px] text-text-muted leading-relaxed">
+                    Most active sharers get a direct opportunity to join the Rogue Core Admin Team & lead their campus network.
+                  </p>
+                </div>
               </div>
 
               <div className="bg-[#06070B] border border-[#232635] rounded-2xl p-4 space-y-2 text-left">
