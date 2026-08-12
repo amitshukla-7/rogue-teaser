@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono, Bebas_Neue, Syne } from "next/font/google";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -16,6 +16,19 @@ const inter = Inter({
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const bebasNeue = Bebas_Neue({
+  weight: "400",
+  variable: "--font-bebas",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const syne = Syne({
+  variable: "--font-syne",
   subsets: ["latin"],
   display: "swap",
 });
@@ -42,7 +55,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased dark`}
+      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable} ${bebasNeue.variable} ${syne.variable} h-full antialiased dark`}
     >
       <head>
         <title>Rogue - Let your shadow out</title>

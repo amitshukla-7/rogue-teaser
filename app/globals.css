@@ -1,6 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Permanent+Marker&family=Syne:wght@700;800;900&family=UnifrakturMaguntia&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
+
+.font-bebas { font-family: 'Bebas Neue', sans-serif; }
+.font-syne { font-family: 'Syne', sans-serif; }
+.font-marker { font-family: 'Permanent Marker', cursive; }
+.font-gothic { font-family: 'UnifrakturMaguntia', serif; }
+
 
 :root {
   --ink: #0D0E15;

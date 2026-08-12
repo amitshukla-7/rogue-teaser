@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import FoundingBadge from '../components/founding-badge';
+import StoryCardModal from '../components/story-card-modal';
 
 export default function TeaserPage() {
   const [waitlistCount, setWaitlistCount] = useState<number>(0);
@@ -61,6 +62,9 @@ export default function TeaserPage() {
   const [claimingHandle, setClaimingHandle] = useState(false);
   const [handleError, setHandleError] = useState('');
   const [handleSuccess, setHandleSuccess] = useState('');
+
+  // STORY CARD MODAL STATE
+  const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
 
   // COUNTDOWN TIMER TO AUGUST 20, 2026 12:00 PM
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
@@ -293,8 +297,15 @@ export default function TeaserPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           
+          <button
+            onClick={() => setIsStoryModalOpen(true)}
+            className="px-3.5 py-2 rounded-2xl bg-[#121422] hover:bg-[#1A1D2C] border border-[#232635] text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:border-coral/40"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-coral" /> Story Card
+          </button>
+
           {/* HEADER PRE-REGISTER BUTTON */}
           <button
             onClick={scrollToRegister}
@@ -1040,6 +1051,28 @@ export default function TeaserPage() {
                 )}
               </div>
 
+              {/* SLEEK GONE ROGUE STORY CARD GENERATOR CALLOUT */}
+              <div className="bg-gradient-to-br from-coral/20 via-[#121422] to-amber-500/10 border border-coral/40 rounded-2xl p-4 space-y-2.5 text-left shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4.5 h-4.5 text-coral" />
+                    <h4 className="text-xs sm:text-sm font-extrabold text-white">Your Official Story Card</h4>
+                  </div>
+                  <span className="text-[9.5px] font-mono text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 font-bold">
+                    9:16 Story Ready
+                  </span>
+                </div>
+                <p className="text-[11px] text-text-muted leading-relaxed">
+                  Generate & download your personalized, ultra-cool <strong className="text-white font-mono">GONE ROGUE</strong> story card to share on Instagram & Snapchat!
+                </p>
+                <button
+                  onClick={() => setIsStoryModalOpen(true)}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-coral to-rose-600 hover:from-coral-hover hover:to-rose-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <ImageIcon className="w-4 h-4" /> Generate & Download Story Card
+                </button>
+              </div>
+
               {/* PERSONAL REFERRAL CODE & LINK HUB */}
               <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-4 sm:p-5 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1134,13 +1167,42 @@ export default function TeaserPage() {
                 </div>
               </div>
 
-              <div className="bg-[#06070B] border border-[#232635] rounded-2xl p-4 space-y-2 text-left">
-                <div className="flex items-center justify-between text-xs font-mono text-slate-200 font-bold">
-                  <span className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-slate-200" /> Domain Gated</span>
+              {/* FIRST-TIME VISITOR STORY POSTER BUILDER CALLOUT */}
+              <div className="bg-gradient-to-br from-[#161828] via-[#0E101A] to-[#1a0f16] border border-[#FF5252]/40 rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#FF5252]" />
+                    <h4 className="text-xs sm:text-sm font-extrabold text-white">Create Custom @Handle Story Poster</h4>
+                  </div>
+                  <span className="text-[9.5px] font-mono text-[#FF5252] bg-[#FF5252]/10 px-2 py-0.5 rounded-full border border-[#FF5252]/30 font-bold">
+                    9:16 Ready
+                  </span>
                 </div>
-                <p className="text-xs text-text-muted leading-relaxed">
-                  To prevent fake profiles and maintain a safe, troll-free campus community, you can register only with college email address.
+
+                <p className="text-[11.5px] text-text-muted leading-relaxed">
+                  Sign in with Google to build, customize & download your personalized <strong className="text-white">GONE ROGUE</strong> streetwear story poster with your reserved campus handle!
                 </p>
+
+                {/* PREVIEW THUMBNAILS OF THE 3 USER POSTERS */}
+                <div className="grid grid-cols-3 gap-2.5 pt-1 pb-1">
+                  <div className="relative rounded-xl overflow-hidden border border-white/20 aspect-[9/16] group cursor-pointer" onClick={handleGooglePreRegister}>
+                    <img src="/posters/poster_gone_rogue_full.jpg" alt="Rogue Crimson" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors" />
+                    <span className="absolute bottom-1 left-1 right-1 text-[8px] font-mono font-bold text-center text-white bg-black/80 py-0.5 rounded backdrop-blur-sm">Crimson</span>
+                  </div>
+                  
+                  <div className="relative rounded-xl overflow-hidden border border-white/20 aspect-[9/16] group cursor-pointer" onClick={handleGooglePreRegister}>
+                    <img src="/posters/poster_drift_red.jpg" alt="Red Drift" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors" />
+                    <span className="absolute bottom-1 left-1 right-1 text-[8px] font-mono font-bold text-center text-white bg-black/80 py-0.5 rounded backdrop-blur-sm">Drift Red</span>
+                  </div>
+
+                  <div className="relative rounded-xl overflow-hidden border border-white/20 aspect-[9/16] group cursor-pointer" onClick={handleGooglePreRegister}>
+                    <img src="/posters/poster_silver_full.jpg" alt="Silver Metallic" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors" />
+                    <span className="absolute bottom-1 left-1 right-1 text-[8px] font-mono font-bold text-center text-white bg-black/80 py-0.5 rounded backdrop-blur-sm">Silver</span>
+                  </div>
+                </div>
               </div>
 
               {error && (
@@ -1200,6 +1262,15 @@ export default function TeaserPage() {
           <p className="text-center">© 2026 Rogue. Built for students, by students.</p>
         </div>
       </footer>
+
+      {/* STORY CARD MODAL */}
+      <StoryCardModal
+        isOpen={isStoryModalOpen}
+        onClose={() => setIsStoryModalOpen(false)}
+        defaultHandle={claimedHandle}
+        position={submittedPosition}
+        userEmail={userEmail}
+      />
 
     </div>
   );
