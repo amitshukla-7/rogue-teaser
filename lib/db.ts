@@ -11,6 +11,7 @@ export interface PreRegUser {
   ref_code?: string;
   referred_by?: string;
   referral_count?: number;
+  handle?: string;
 }
 
 // Global serverless connection singleton to prevent pool exhaustion on Supabase
@@ -43,6 +44,7 @@ async function ensureReferralColumns() {
     await pool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS ref_code TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT;
     `);
   } catch (err) {
     console.error('PostgreSQL ensureReferralColumns note:', err);
@@ -74,6 +76,7 @@ export async function getPreRegistrations(): Promise<PreRegUser[]> {
           u.created_at, 
           u.referred_by, 
           u.ref_code,
+          u.handle,
           (
             SELECT COUNT(*)::int 
             FROM users r 
@@ -98,7 +101,8 @@ export async function getPreRegistrations(): Promise<PreRegUser[]> {
           google_id: row.google_id,
           ref_code: generatedCode,
           referred_by: row.referred_by || 'Direct / Organic',
-          referral_count: parseInt(row.referral_count || '0', 10)
+          referral_count: parseInt(row.referral_count || '0', 10),
+          handle: row.handle || undefined
         };
       });
     } catch (err) {
@@ -215,3 +219,53 @@ export async function addPreRegistration(email: string, name?: string, googleId?
     google_id: googleId
   };
 }
+
+export async function claimUserHandle(email: string, rawHandle: string): Promise<string> {
+  const cleanEmail = email.trim().toLowerCase();
+  let cleanHandle = rawHandle.trim().toLowerCase().replace(/^@/, '').replace(/[^a-z0-9_]/g, '');
+
+  if (!cleanHandle || cleanHandle.length < 3) {
+    throw new Error('Username must be at least 3 characters long.');
+  }
+
+  if (cleanHandle.length > 20) {
+    throw new Error('Username cannot exceed 20 characters.');
+  }
+
+  if (pool) {
+    await ensureReferralColumns();
+    // Check if handle is already taken by a DIFFERENT user
+    const checkRes = await pool.query(
+      'SELECT id, email FROM users WHERE LOWER(handle) = $1 AND LOWER(email) != $2',
+      [cleanHandle, cleanEmail]
+    );
+
+    if (checkRes.rows.length > 0) {
+      throw new Error(`@${cleanHandle} is already reserved by another student! Please pick another one.`);
+    }
+
+    // Update handle for this user
+    await pool.query(
+      'UPDATE users SET handle = $1 WHERE LOWER(email) = $2',
+      [cleanHandle, cleanEmail]
+    );
+
+    return cleanHandle;
+  }
+
+  return cleanHandle;
+}
+
+export async function getUserHandle(email: string): Promise<string | null> {
+  if (pool) {
+    try {
+      await ensureReferralColumns();
+      const res = await pool.query('SELECT handle FROM users WHERE LOWER(email) = $1', [email.trim().toLowerCase()]);
+      return res.rows[0]?.handle || null;
+    } catch (err) {
+      console.error('PostgreSQL getUserHandle error:', err);
+    }
+  }
+  return null;
+}
+

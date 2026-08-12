@@ -55,6 +55,13 @@ export default function TeaserPage() {
   const [incomingRefCode, setIncomingRefCode] = useState<string>('');
   const [error, setError] = useState('');
 
+  // CLAIM @HANDLE STATE
+  const [claimedHandle, setClaimedHandle] = useState<string>('');
+  const [handleInput, setHandleInput] = useState<string>('');
+  const [claimingHandle, setClaimingHandle] = useState(false);
+  const [handleError, setHandleError] = useState('');
+  const [handleSuccess, setHandleSuccess] = useState('');
+
   // COUNTDOWN TIMER TO AUGUST 20, 2026 12:00 PM
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
     days: 10,
@@ -104,6 +111,48 @@ export default function TeaserPage() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch handle whenever userEmail changes
+  useEffect(() => {
+    if (userEmail) {
+      apiFetch(`/api/waitlist/claim-handle?email=${encodeURIComponent(userEmail)}`)
+        .then((data) => {
+          if (data && data.handle) {
+            setClaimedHandle(data.handle);
+            setHandleInput(data.handle);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [userEmail]);
+
+  const handleClaimHandle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!handleInput.trim() || !userEmail) return;
+
+    setClaimingHandle(true);
+    setHandleError('');
+    setHandleSuccess('');
+
+    try {
+      const data = await apiFetch('/api/waitlist/claim-handle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail, handle: handleInput })
+      });
+
+      if (data && data.handle) {
+        setClaimedHandle(data.handle);
+        setHandleSuccess(`Awesome! @${data.handle} is reserved for you on launch day.`);
+      } else if (data && data.error) {
+        setHandleError(data.error);
+      }
+    } catch (err: any) {
+      setHandleError(err.message || 'Failed to reserve @handle. Please try again.');
+    } finally {
+      setClaimingHandle(false);
+    }
+  };
 
   // Auto-scroll to Feature Showcase section after 2.5s if user hasn't scrolled yet
   useEffect(() => {
@@ -923,6 +972,72 @@ export default function TeaserPage() {
                     You are officially <strong className="text-coral font-bold text-base">#{submittedPosition}</strong> on your campus waitlist. Access code sent to <span className="text-teal font-mono break-all">{userEmail}</span> on <strong className="text-white">Aug 20</strong>!
                   </p>
                 </div>
+              </div>
+
+              {/* CLAIM YOUR CAMPUS @HANDLE BOX */}
+              <div className="bg-[#06070B] border border-amber-500/40 rounded-2xl p-4 sm:p-5 space-y-3 relative overflow-hidden shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs sm:text-sm font-bold text-white">Reserve Your Rogue @Handle</h4>
+                  </div>
+                  {claimedHandle && (
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20 font-bold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Reserved
+                    </span>
+                  )}
+                </div>
+
+                {claimedHandle ? (
+                  <div className="bg-[#0E101A] border border-emerald-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] text-text-muted block">Your Official Reserved Handle</span>
+                      <span className="text-base font-mono font-bold text-emerald-400">@{claimedHandle}</span>
+                    </div>
+                    <button
+                      onClick={() => setClaimedHandle('')}
+                      className="text-[11px] text-text-muted hover:text-white underline cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleClaimHandle} className="space-y-2.5">
+                    <p className="text-[11px] text-text-muted leading-relaxed">
+                      Lock your preferred username now so nobody else in your campus can take it.
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-2.5 text-xs font-mono text-amber-400 font-bold">@</span>
+                        <input
+                          type="text"
+                          placeholder="your_handle"
+                          value={handleInput}
+                          onChange={(e) => setHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                          maxLength={20}
+                          className="w-full bg-[#0E101A] border border-[#232635] rounded-xl py-2 pl-7 pr-3 text-xs font-mono text-white placeholder-text-muted/50 outline-none focus:border-amber-400 transition-all"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={claimingHandle || !handleInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {claimingHandle ? 'Checking...' : 'Reserve'}
+                      </button>
+                    </div>
+
+                    {handleError && (
+                      <p className="text-[11px] text-rose-400 font-mono font-bold">{handleError}</p>
+                    )}
+
+                    {handleSuccess && (
+                      <p className="text-[11px] text-emerald-400 font-mono font-bold">{handleSuccess}</p>
+                    )}
+                  </form>
+                )}
               </div>
 
               {/* PERSONAL REFERRAL CODE & LINK HUB */}
