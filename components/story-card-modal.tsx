@@ -7,7 +7,8 @@ import {
   Share2, 
   Check, 
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
@@ -18,6 +19,8 @@ interface StoryCardModalProps {
   defaultHandle?: string;
   position?: number | null;
   userEmail?: string;
+  isLoggedIn?: boolean;
+  onLoginRedirect?: () => void;
 }
 
 export type PosterTheme = 'full_rogue' | 'drift_red' | 'silver_rogue';
@@ -45,8 +48,12 @@ export default function StoryCardModal({
   onClose,
   defaultName = '',
   defaultHandle = '',
-  userEmail = ''
+  userEmail = '',
+  isLoggedIn,
+  onLoginRedirect
 }: StoryCardModalProps) {
+  const isUserLoggedIn = isLoggedIn !== undefined ? isLoggedIn : Boolean(userEmail && userEmail.trim().length > 0);
+
   // Infer Name & Username automatically (NO manual input forms)
   const name = defaultName || (userEmail ? userEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Rogue Member');
   const cleanHandle = defaultHandle ? defaultHandle.trim().replace(/^@/, '') : '';
@@ -65,7 +72,36 @@ export default function StoryCardModal({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const handleLoginRedirect = () => {
+    showToast('🔒 Login required to download posters! Redirecting to login...');
+    setTimeout(() => {
+      if (onLoginRedirect) {
+        onLoginRedirect();
+      } else {
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
+        const refParam = typeof window !== 'undefined' ? localStorage.getItem('rogue_ref_code') || '' : '';
+        const refQuery = refParam ? `?ref=${encodeURIComponent(refParam)}` : '';
+        window.location.href = backendUrl ? `${backendUrl}/api/auth/google${refQuery}` : `/api/auth/google${refQuery}`;
+      }
+    }, 800);
+  };
+
+  // Fire-and-forget poster usage tracking
+  const trackPosterEvent = (action: 'download' | 'share') => {
+    if (!userEmail) return;
+    fetch('/api/poster-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userEmail, action, poster_theme: activeTheme }),
+    }).catch(() => {/* tracking failure should never surface to the user */});
+  };
+
   const handleDownload = async () => {
+    if (!isUserLoggedIn) {
+      handleLoginRedirect();
+      return;
+    }
+
     if (!cardRef.current) return;
     setDownloading(true);
     try {
@@ -80,6 +116,7 @@ export default function StoryCardModal({
       link.href = dataUrl;
       link.click();
 
+      trackPosterEvent('download');
       showToast('✨ High-Res Story Poster downloaded! Ready for Instagram & Snapchat!');
     } catch (err) {
       console.error('Error exporting poster:', err);
@@ -90,6 +127,11 @@ export default function StoryCardModal({
   };
 
   const handleShare = async () => {
+    if (!isUserLoggedIn) {
+      handleLoginRedirect();
+      return;
+    }
+
     if (!cardRef.current) return;
     setSharing(true);
     try {
@@ -109,17 +151,23 @@ export default function StoryCardModal({
           title: 'Gone Rogue',
           text: `Gone Rogue 🚀 ${cleanHandle ? `@${cleanHandle}` : ''}`,
         });
-        showToast('🚀 Story Poster shared successfully!');
+        // navigator.share resolves when the share sheet OPENS, not when complete —
+        // no toast here; the OS share UI is the user's feedback.
+        trackPosterEvent('share');
       } else {
         const link = document.createElement('a');
         link.download = `gone-rogue-${activeTheme}.png`;
         link.href = dataUrl;
         link.click();
-        showToast('📲 Poster saved to photos!');
+        trackPosterEvent('download');
+        showToast('📲 Poster saved to your device!');
       }
-    } catch (err) {
-      console.error('Error sharing poster:', err);
-      showToast('⚠️ Poster saved to photos!');
+    } catch (err: any) {
+      // AbortError = user cancelled the share sheet — not a real error, stay silent
+      if (err?.name !== 'AbortError') {
+        console.error('Error sharing poster:', err);
+        showToast('⚠️ Could not share. Try downloading instead.');
+      }
     } finally {
       setSharing(false);
     }
@@ -171,7 +219,7 @@ export default function StoryCardModal({
 
             {/* TOP OVERLAY BRAND MARK */}
             <div className="relative z-20 p-4 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 shadow-lg">
+              <div className="flex items-center gap-1.5 bg-[#141414] px-3 py-1 rounded-full border border-white/20 shadow-lg">
                 <div className="w-4 h-4 rounded-full overflow-hidden border border-white/40 flex-shrink-0 bg-black">
                   <img src="/logo.png" alt="Rogue" className="w-full h-full object-cover" />
                 </div>
@@ -183,7 +231,7 @@ export default function StoryCardModal({
 
             {/* 100% MATCHING TRANSLUCENT STREETWEAR MANGA / CYBERPUNK POSTER EMBLEM */}
             <div className="absolute top-[28%] sm:top-[29%] left-0 right-0 z-20 flex flex-col items-center justify-center text-center pointer-events-none px-4">
-              <div className="inline-flex items-center gap-1.5 bg-black/40 backdrop-blur-md border border-white/20 px-2.5 py-0.5 rounded-sm shadow-[0_6px_18px_rgba(0,0,0,0.8)] transform -skew-x-12 select-none relative">
+              <div className="inline-flex items-center gap-1.5 border border-white/20 px-2.5 py-0.5 rounded-sm shadow-[0_6px_18px_rgba(0,0,0,0.8)] transform -skew-x-12 select-none relative" style={{background: 'rgba(0,0,0,0.65)'}}>
                 
                 {/* RED ACCENT CORNER SLASHES */}
                 <div className="absolute -top-0.5 -left-0.5 w-2 h-2 border-t-2 border-l-2 border-[#FF5252]" />
@@ -225,9 +273,25 @@ export default function StoryCardModal({
                 <Sparkles className="w-5 h-5 text-coral" /> Choose Poster Artwork
               </h2>
               <p className="text-xs text-text-muted mt-1">
-                Select between the 4 poster themes for your story!
+                Select between the poster themes for your story!
               </p>
             </div>
+
+            {/* UNAUTHENTICATED WARNING BANNER */}
+            {!isUserLoggedIn && (
+              <div className="bg-[#161826] border border-amber-500/40 p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-lg animate-fadeIn">
+                <div className="flex items-center gap-2 text-xs text-amber-300 font-medium">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Only logged-in users can download posters.</span>
+                </div>
+                <button
+                  onClick={handleLoginRedirect}
+                  className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold cursor-pointer transition-all shrink-0 shadow"
+                >
+                  Login Now
+                </button>
+              </div>
+            )}
 
             {/* AUTOMATIC USER IDENTITY DISPLAY */}
             <div className="bg-[#0F1018] border border-[#232635] p-3.5 rounded-2xl flex items-center justify-between">
@@ -245,7 +309,7 @@ export default function StoryCardModal({
               </span>
             </div>
 
-            {/* 4 POSTER THEME SELECTION BUTTONS WITH IMAGE THUMBNAILS */}
+            {/* POSTER THEME SELECTION BUTTONS WITH IMAGE THUMBNAILS */}
             <div className="space-y-2.5">
               <label className="text-xs font-mono font-semibold text-white block">
                 Official Poster Themes
@@ -287,10 +351,20 @@ export default function StoryCardModal({
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="w-full py-3.5 px-4 rounded-2xl bg-coral hover:bg-coral-hover text-white text-xs sm:text-sm font-extrabold transition-all shadow-lg shadow-coral/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.01] active:scale-[0.99]"
+              className={`w-full py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.01] active:scale-[0.99] ${
+                isUserLoggedIn 
+                  ? 'bg-coral hover:bg-coral-hover text-white shadow-coral/30' 
+                  : 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-400/30'
+              }`}
             >
-              <Download className="w-4 h-4" />
-              <span>{downloading ? 'Exporting 1080x1920 Poster...' : 'Download Story Poster (PNG)'}</span>
+              {isUserLoggedIn ? <Download className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              <span>
+                {downloading 
+                  ? 'Exporting 1080x1920 Poster...' 
+                  : isUserLoggedIn 
+                  ? 'Download Story Poster (PNG)' 
+                  : 'Login to Download Poster (PNG)'}
+              </span>
             </button>
 
             <button
@@ -298,12 +372,18 @@ export default function StoryCardModal({
               disabled={sharing}
               className="w-full py-3 px-4 rounded-2xl bg-[#181A2A] hover:bg-[#22253B] border border-[#232635] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <Share2 className="w-4 h-4 text-teal" />
-              <span>{sharing ? 'Preparing Share...' : 'Direct Share to Story / Apps'}</span>
+              {isUserLoggedIn ? <Share2 className="w-4 h-4 text-teal" /> : <Lock className="w-4 h-4 text-amber-400" />}
+              <span>
+                {sharing 
+                  ? 'Preparing Share...' 
+                  : isUserLoggedIn 
+                  ? 'Direct Share to Story / Apps' 
+                  : 'Login to Share Poster'}
+              </span>
             </button>
 
             <span className="text-[10px] font-mono text-text-muted text-center block">
-              High-Res 9:16 Story Poster • Ready to Post
+              {isUserLoggedIn ? 'High-Res 9:16 Story Poster • Ready to Post' : '🔒 Login required to export high-res story poster'}
             </span>
           </div>
 
@@ -314,3 +394,4 @@ export default function StoryCardModal({
     </div>
   );
 }
+

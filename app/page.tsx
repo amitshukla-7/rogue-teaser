@@ -1270,6 +1270,8 @@ export default function TeaserPage() {
         defaultHandle={claimedHandle}
         position={submittedPosition}
         userEmail={userEmail}
+        isLoggedIn={Boolean(userEmail && userEmail.trim().length > 0)}
+        onLoginRedirect={handleGooglePreRegister}
       />
 
     </div>
