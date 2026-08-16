@@ -112,7 +112,7 @@ export async function getPreRegistrations(): Promise<PreRegUser[]> {
   return [];
 }
 
-export async function addPreRegistration(email: string, name?: string, googleId?: string, referredBy?: string): Promise<PreRegUser> {
+export async function addPreRegistration(email: string, name?: string, googleId?: string, referredBy?: string, collegeVerified: boolean = true): Promise<PreRegUser> {
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = name || cleanEmail.split('@')[0].replace('.', ' ');
   const cleanRefCode = `ROGUE-${cleanEmail.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
@@ -162,14 +162,14 @@ export async function addPreRegistration(email: string, name?: string, googleId?
       try {
         const insertRes = await pool.query(
           `INSERT INTO users (email, name, google_id, college_verified, referred_by, ref_code)
-           VALUES ($1, $2, $3, true, $4, $5)
+           VALUES ($1, $2, $3, $6, $4, $5)
            ON CONFLICT (email) DO UPDATE
              SET google_id = COALESCE(EXCLUDED.google_id, users.google_id),
                  name = COALESCE(users.name, EXCLUDED.name),
                  referred_by = COALESCE(users.referred_by, EXCLUDED.referred_by),
                  ref_code = COALESCE(users.ref_code, EXCLUDED.ref_code)
            RETURNING id, created_at, referred_by, ref_code`,
-          [cleanEmail, cleanName, googleId || `google_${Date.now()}`, cleanReferredBy, cleanRefCode]
+          [cleanEmail, cleanName, googleId || `google_${Date.now()}`, cleanReferredBy, cleanRefCode, collegeVerified]
         );
         newUserRow = insertRes.rows[0];
       } catch (insertErr) {

@@ -63,14 +63,18 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${url.origin}/?error=${encodeURIComponent('Could not verify Google email address.')}`);
   }
 
-  if (!isInstitutionalEmail(userEmail)) {
-    return NextResponse.redirect(`${url.origin}/?error=${encodeURIComponent('Registration is restricted strictly to verified college email addresses (e.g., @mits.ac.in or .ac.in / .edu). Personal emails (Gmail, Yahoo, Outlook) are not allowed.')}`);
-  }
+  // All Google accounts are accepted.
+  // college_verified = true for institutional emails (.ac.in / .edu), false for personal emails.
+  // Personal-email users see a nudge banner on the UI to upgrade to their college email later.
+  const isPersonalEmail = !isInstitutionalEmail(userEmail);
+  const collegeVerified = !isPersonalEmail;
 
-  // Save verified user to pre-registration DB
+  // Save user to pre-registration DB
   try {
-    const user = await addPreRegistration(userEmail, name, googleId, referredBy);
-    const response = NextResponse.redirect(`${url.origin}/?registered=true&email=${encodeURIComponent(userEmail)}&position=${user.position}`);
+    const user = await addPreRegistration(userEmail, name, googleId, referredBy, collegeVerified);
+    // Append personal_email=true so the UI can show the "upgrade your email" nudge
+    const extraParam = isPersonalEmail ? '&personal_email=true' : '';
+    const response = NextResponse.redirect(`${url.origin}/?registered=true&email=${encodeURIComponent(userEmail)}&position=${user.position}${extraParam}`);
     response.cookies.set('pre_reg_email', userEmail, { path: '/', httpOnly: false, maxAge: 60 * 60 * 24 * 30 });
     return response;
   } catch (err: any) {

@@ -55,7 +55,7 @@ export async function GET(req: Request) {
   const secret = url.searchParams.get('secret');
 
   // Basic secret protection (uses the ADMIN_SECRET env var)
-  if (secret !== process.env.ADMIN_SECRET) {
+  if (secret !== process.env.ADMIN_SECRET_KEY) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

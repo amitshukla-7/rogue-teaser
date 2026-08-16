@@ -66,6 +66,9 @@ export default function TeaserPage() {
   // STORY CARD MODAL STATE
   const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
 
+  // PERSONAL EMAIL NUDGE BANNER
+  const [isPersonalEmailUser, setIsPersonalEmailUser] = useState(false);
+
   // COUNTDOWN TIMER TO AUGUST 20, 2026 12:00 PM
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
     days: 10,
@@ -107,6 +110,9 @@ export default function TeaserPage() {
         const pos = positionParam ? parseInt(positionParam, 10) : 1;
         setUserEmail(email);
         setSubmittedPosition(pos);
+        if (params.get('personal_email') === 'true') {
+          setIsPersonalEmailUser(true);
+        }
         setTimeout(() => {
           document.getElementById('register')?.scrollIntoView({ behavior: 'smooth' });
         }, 400);
@@ -999,6 +1005,16 @@ export default function TeaserPage() {
                   )}
                 </div>
 
+                {/* PERSONAL EMAIL NUDGE — shown inline where user is choosing handle */}
+                {isPersonalEmailUser && (
+                  <div className="flex items-start gap-2 bg-amber-400/8 border border-amber-400/25 rounded-xl px-3 py-2.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-200 leading-relaxed">
+                      <span className="font-bold text-amber-300">You're in!</span> Log in with your{' '}
+                      <span className="font-semibold text-amber-100">college email (.ac.in / .edu)</span> to get full verified access when we launch.
+                    </p>
+                  </div>
+                )}
                 {claimedHandle ? (
                   <div className="bg-[#0E101A] border border-emerald-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
                     <div>
