@@ -986,7 +986,7 @@ export default function TeaserPage() {
                 <div className="space-y-1">
                   <h3 className="text-2xl sm:text-3xl font-bold text-white font-fraunces">You're On The List!</h3>
                   <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
-                    You are officially <strong className="text-coral font-bold text-base">#{submittedPosition}</strong> on your campus waitlist. Access code sent to <span className="text-teal font-mono break-all">{userEmail}</span> on <strong className="text-white">Aug 20</strong>!
+                    You're officially on the campus waitlist!
                   </p>
                 </div>
               </div>
