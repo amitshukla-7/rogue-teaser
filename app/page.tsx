@@ -1172,17 +1172,6 @@ export default function TeaserPage() {
                 </div>
               )}
 
-              {/* SLEEK MATTE PRE-LOGIN NOTE */}
-              <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-3.5 text-left flex items-start gap-3">
-                <Crown className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-semibold text-white">Campus Lead & Admin Team</h4>
-                  <p className="text-[11px] text-text-muted leading-relaxed">
-                    Most active sharers get a direct opportunity to join the Rogue Core Admin Team & lead their campus network.
-                  </p>
-                </div>
-              </div>
-
               {/* FIRST-TIME VISITOR STORY POSTER BUILDER CALLOUT */}
               <div className="bg-gradient-to-br from-[#161828] via-[#0E101A] to-[#1a0f16] border border-[#FF5252]/40 rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xl relative overflow-hidden">
                 <div className="flex items-center justify-between">
