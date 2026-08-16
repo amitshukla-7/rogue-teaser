@@ -1247,7 +1247,6 @@ export default function TeaserPage() {
                 </p>
               </div>
 
-              <span className="text-xs text-text-muted block">First 100 sign-ups lock permanent Founding Member status.</span>
             </div>
           )}
 
