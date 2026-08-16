@@ -1249,6 +1249,15 @@ export default function TeaserPage() {
                 )}
               </button>
 
+              {/* PRE-LOGIN COLLEGE EMAIL NUDGE */}
+              <div className="flex items-start gap-2 bg-amber-400/8 border border-amber-400/20 rounded-xl px-3 py-2.5 text-left">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-200 leading-relaxed">
+                  <span className="font-bold text-amber-300">Tip:</span> Use your{' '}
+                  <span className="font-semibold text-amber-100">college email (mitsgwl.ac.in)</span> to get full verified access on launch day. Personal emails can register too but won't be verified.
+                </p>
+              </div>
+
               <span className="text-xs text-text-muted block">First 100 sign-ups lock permanent Founding Member status.</span>
             </div>
           )}
