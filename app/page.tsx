@@ -40,7 +40,10 @@ import {
   CheckCircle,
   FileText,
   Clock,
-  Lock
+  Lock,
+  BarChart2,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import FoundingBadge from '../components/founding-badge';
@@ -80,16 +83,43 @@ export default function TeaserPage() {
   // CAROUSEL AUTO-SLIDE & ACTIVE SLIDE INDEX
   const TOTAL_SLIDES = 7;
   const [activeSlide, setActiveSlide] = useState<number>(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(true);
+  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
   const sliderRef = useRef<HTMLDivElement>(null);
+
+  // TEASER POST FEATURE STATE (MATCHING EXACT ROGUE BLUEPRINT)
+  const [hasTeaserPosted, setHasTeaserPosted] = useState<boolean>(false);
+  const [teaserName, setTeaserName] = useState<string>('');
+  const [teaserTitle, setTeaserTitle] = useState<string>('');
+  const [teaserContent, setTeaserContent] = useState<string>('');
+  const [teaserTopic, setTeaserTopic] = useState<string>('General');
+  const [teaserIsAnonymous, setTeaserIsAnonymous] = useState<boolean>(false);
+  const [isPollPost, setIsPollPost] = useState<boolean>(false);
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+  const [pollDuration, setPollDuration] = useState<'8h' | '24h' | 'always'>('24h');
+  const [submittingTeaserPost, setSubmittingTeaserPost] = useState<boolean>(false);
+  const [teaserPostError, setTeaserPostError] = useState<string>('');
+  const [savedTeaserPostTitle, setSavedTeaserPostTitle] = useState<string>('');
+  const [savedTeaserPostContent, setSavedTeaserPostContent] = useState<string>('');
 
   useEffect(() => {
     fetchWaitlistStats();
     calculateCountdown();
     const interval = setInterval(calculateCountdown, 1000);
 
-    // Check if returning from Google OAuth callback or has referral param
+    // Check if user has already posted from teaser site
     if (typeof window !== 'undefined') {
+      const savedEmail = localStorage.getItem('rogue_teaser_email') || '';
+      if (savedEmail) {
+        setUserEmail(savedEmail);
+      }
+
+      const isPosted = localStorage.getItem('rogue_teaser_user_posted');
+      if (isPosted === 'true') {
+        setHasTeaserPosted(true);
+        setSavedTeaserPostTitle(localStorage.getItem('rogue_teaser_post_title') || '');
+        setSavedTeaserPostContent(localStorage.getItem('rogue_teaser_post_content') || '');
+      }
+
       const params = new URLSearchParams(window.location.search);
       const refParam = params.get('ref') || localStorage.getItem('rogue_ref_code') || '';
       if (refParam) {
@@ -100,27 +130,86 @@ export default function TeaserPage() {
       const urlError = params.get('error');
       if (urlError) {
         setError(decodeURIComponent(urlError));
-        setTimeout(() => {
-          document.getElementById('register')?.scrollIntoView({ behavior: 'smooth' });
-        }, 300);
       }
       if (params.get('registered') === 'true' || params.get('google_auth') === 'success') {
         const email = params.get('email') || 'student@mits.ac.in';
         const positionParam = params.get('position');
         const pos = positionParam ? parseInt(positionParam, 10) : 1;
         setUserEmail(email);
+        localStorage.setItem('rogue_teaser_email', email);
         setSubmittedPosition(pos);
         if (params.get('personal_email') === 'true') {
           setIsPersonalEmailUser(true);
         }
-        setTimeout(() => {
-          document.getElementById('register')?.scrollIntoView({ behavior: 'smooth' });
-        }, 400);
       }
     }
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleCreateTeaserPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userEmail) return;
+
+    if (!teaserTitle.trim() || !teaserContent.trim()) {
+      setTeaserPostError('Please fill in both post title and details.');
+      return;
+    }
+
+    setSubmittingTeaserPost(true);
+    setTeaserPostError('');
+
+    let pollPayload = null;
+    if (isPollPost) {
+      const validOptions = pollOptions.map(o => o.trim()).filter(Boolean);
+      if (validOptions.length < 2) {
+        setTeaserPostError('Please add at least 2 valid options for your poll.');
+        setSubmittingTeaserPost(false);
+        return;
+      }
+      pollPayload = {
+        question: teaserTitle.trim(),
+        options: validOptions,
+        duration: pollDuration
+      };
+    }
+
+    const finalTitle = teaserTitle.trim();
+    const finalContent = teaserContent.trim();
+
+    try {
+      const data = await apiFetch('/api/posts/teaser', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: teaserName.trim(),
+          email: userEmail,
+          title: finalTitle,
+          content: finalContent,
+          topic: teaserTopic,
+          is_anonymous: teaserIsAnonymous,
+          poll: pollPayload
+        })
+      });
+
+      if (data && data.success) {
+        setHasTeaserPosted(true);
+        localStorage.setItem('rogue_teaser_user_posted', 'true');
+        setSavedTeaserPostTitle(finalTitle);
+        setSavedTeaserPostContent(finalContent);
+        setTeaserTitle('');
+        setTeaserContent('');
+        localStorage.setItem('rogue_teaser_post_title', finalTitle);
+        localStorage.setItem('rogue_teaser_post_content', finalContent);
+      } else {
+        setTeaserPostError((data && data.error) || 'Failed to submit post.');
+      }
+    } catch (err: any) {
+      console.error('Teaser post error:', err);
+      setTeaserPostError(err.message || 'Failed to connect to backend server. Please try again.');
+    } finally {
+      setSubmittingTeaserPost(false);
+    }
+  };
 
   // Fetch handle whenever userEmail changes
   useEffect(() => {
@@ -164,26 +253,7 @@ export default function TeaserPage() {
     }
   };
 
-  // Auto-scroll to Feature Showcase section after 2.5s if user hasn't scrolled yet
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const autoScrollTimer = setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('error') || params.get('registered') || window.scrollY > 100) {
-        return;
-      }
-
-      const featuresSection = document.getElementById('features');
-      if (featuresSection) {
-        featuresSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 2500);
-
-    return () => clearTimeout(autoScrollTimer);
-  }, []);
-
-  // Auto-play timer for feature carousel
+  // Auto-play timer for feature carousel (disabled by default)
   useEffect(() => {
     if (!isAutoPlaying) return;
     const autoInterval = setInterval(() => {
@@ -216,13 +286,21 @@ export default function TeaserPage() {
   };
 
   const calculateCountdown = () => {
-    const launchDate = new Date('2026-08-20T12:00:00+05:30').getTime();
-    const now = new Date().getTime();
-    const difference = launchDate - now;
+    let targetStr = typeof window !== 'undefined' ? localStorage.getItem('rogue_24h_countdown_target') : null;
+    let targetTime = targetStr ? parseInt(targetStr, 10) : 0;
+    
+    if (!targetTime || targetTime <= Date.now()) {
+      targetTime = Date.now() + 24 * 60 * 60 * 1000;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('rogue_24h_countdown_target', String(targetTime));
+      }
+    }
+    
+    const difference = targetTime - Date.now();
 
     if (difference > 0) {
-      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const days = 0;
+      const hours = Math.floor(difference / (1000 * 60 * 60));
       const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((difference % (1000 * 60)) / 1000);
       setTimeLeft({ days, hours, minutes, seconds });
@@ -304,15 +382,7 @@ export default function TeaserPage() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          
-          <button
-            onClick={() => setIsStoryModalOpen(true)}
-            className="px-3.5 py-2 rounded-2xl bg-[#121422] hover:bg-[#1A1D2C] border border-[#232635] text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:border-coral/40"
-          >
-            <ImageIcon className="w-3.5 h-3.5 text-coral" /> Story Card
-          </button>
-
-          {/* HEADER PRE-REGISTER BUTTON */}
+          {/* HEADER PRE-REGISTER BUTTON ONLY */}
           <button
             onClick={scrollToRegister}
             className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-2xl bg-coral hover:bg-coral-hover text-white text-xs sm:text-sm font-bold transition-all shadow-lg shadow-coral/30 hover:scale-105 cursor-pointer flex items-center gap-1.5"
@@ -329,17 +399,12 @@ export default function TeaserPage() {
         <div className="inline-flex flex-col sm:flex-row items-center gap-3 sm:gap-6 px-5 py-3 sm:py-3.5 rounded-full bg-[#0E101A]/90 border border-[#232635] shadow-2xl backdrop-blur-md max-w-full">
           <div className="flex items-center gap-2 text-xs font-mono text-coral font-semibold tracking-wider uppercase shrink-0">
             <span className="w-2 h-2 rounded-full bg-coral animate-ping shrink-0" />
-            <span>Launch: August 20, 2026</span>
+            <span>Launch Countdown</span>
           </div>
 
           <div className="h-3 w-[1px] bg-[#232635] hidden sm:block" />
 
           <div className="flex items-center gap-3 font-mono text-xs text-white font-medium">
-            <div className="flex items-baseline gap-1">
-              <span className="text-sm sm:text-base font-bold text-white font-mono">{String(timeLeft.days).padStart(2, '0')}</span>
-              <span className="text-[10px] text-text-muted">d</span>
-            </div>
-            <span className="text-text-muted/40 font-bold">:</span>
             <div className="flex items-baseline gap-1">
               <span className="text-sm sm:text-base font-bold text-white font-mono">{String(timeLeft.hours).padStart(2, '0')}</span>
               <span className="text-[10px] text-text-muted">h</span>
@@ -371,7 +436,270 @@ export default function TeaserPage() {
           </p>
         </div>
 
-        {/* FEATURES SHOWCASE (SLIDER FIRST!) */}
+        {/* TEASER POST FEATURE CARD (FIRST!) */}
+        <div id="teaser-post" className="w-full max-w-lg bg-[#0E101A] border border-[#232635] rounded-3xl p-6 sm:p-8 shadow-2xl relative space-y-5 text-left mx-auto">
+          <div className="border-b border-[#1E2130] pb-3 space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4.5 h-4.5 text-coral" />
+                <h3 className="text-lg font-bold text-white font-fraunces">Post your thoughts and go rogue</h3>
+              </div>
+              {submittedPosition || userEmail ? (
+                <span className="text-[9.5px] font-mono text-teal bg-teal/10 px-2 py-0.5 rounded-full border border-teal/20 font-bold">
+                  Unlocked
+                </span>
+              ) : (
+                <span className="text-[9.5px] font-mono text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 font-bold flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Pre-Register Required
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-text-muted leading-relaxed font-sans pt-1">
+              "What’s a secret confession, controversial campus hot-take, or wild rumor you’d only share if no one knew it was you?"
+            </p>
+          </div>
+
+          {hasTeaserPosted ? (
+            <div className="bg-[#07080E] border border-teal-500/40 rounded-2xl p-5 space-y-3.5 animate-fadeIn">
+              <div className="flex items-center gap-2 text-teal font-bold text-xs font-mono">
+                <CheckCircle2 className="w-5 h-5 shrink-0 text-teal" />
+                <span>Post Created & Saved to Account!</span>
+              </div>
+              {(savedTeaserPostTitle || savedTeaserPostContent) && (
+                <div className="bg-[#121422] p-3.5 rounded-xl border border-[#232635] space-y-1">
+                  {savedTeaserPostTitle && (
+                    <h5 className="text-xs font-bold text-white font-sans">{savedTeaserPostTitle}</h5>
+                  )}
+                  {savedTeaserPostContent && (
+                    <p className="text-xs text-text-muted leading-relaxed font-sans">
+                      "{savedTeaserPostContent}"
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="p-4 bg-gradient-to-r from-teal/15 via-[#0A1D1A] to-coral/10 border border-teal/40 rounded-xl text-xs font-medium text-emerald-300 leading-relaxed space-y-1">
+                <div className="flex items-center gap-1.5 font-bold font-mono text-teal text-xs">
+                  <Sparkles className="w-3.5 h-3.5 text-teal" />
+                  <span>Ready for Launch Day</span>
+                </div>
+                <p className="text-[11.5px] text-emerald-200/90 leading-normal">
+                  Your post is safely stored under your account. It will automatically publish live to the main campus feed the moment Rogue goes live!
+                </p>
+              </div>
+            </div>
+          ) : !(submittedPosition || userEmail) ? (
+            /* LOCKED FEATURE STATE FOR NON-PRE-REGISTERED VISITORS */
+            <div className="bg-[#07080E] border border-amber-500/30 rounded-2xl p-6 text-center space-y-4 relative overflow-hidden">
+              <div className="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center mx-auto text-amber-400 shadow-md">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-white font-mono uppercase tracking-wider">Locked Feature</h4>
+                <p className="text-xs text-text-muted leading-relaxed max-w-xs mx-auto">
+                  Pre-register with your Google account below to unlock your 1-time early post creation for Rogue!
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => document.getElementById('register')?.scrollIntoView({ behavior: 'smooth' })}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-extrabold transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" /> Pre-Register to Unlock Post Creation
+              </button>
+            </div>
+          ) : (
+            /* UNLOCKED FORM FOR PRE-REGISTERED USERS (MATCHING ROGUE BLUEPRINT) */
+            <div className="space-y-4">
+
+              {/* Post Type Selector Tabs */}
+              <div className="flex bg-[#07080E] p-1 rounded-xl border border-[#232635] text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsPollPost(false)}
+                  className={`flex-1 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    !isPollPost ? 'bg-coral text-white shadow-md' : 'text-text-muted hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" /> Standard Post
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPollPost(true)}
+                  className={`flex-1 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    isPollPost ? 'bg-coral/20 text-coral border border-coral/40 shadow-md' : 'text-text-muted hover:text-white'
+                  }`}
+                >
+                  <BarChart2 className="w-3.5 h-3.5" /> Create Poll
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateTeaserPost} className="space-y-4">
+                <div className="flex items-center justify-between bg-teal/10 border border-teal/30 rounded-xl px-3 py-2 text-xs text-teal font-mono">
+                  <span className="truncate">Pre-registered: <strong>{userEmail}</strong></span>
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-text-muted uppercase mb-1">
+                    {isPollPost ? 'Poll Question / Title *' : 'Post Title *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={teaserTitle}
+                    onChange={(e) => setTeaserTitle(e.target.value)}
+                    placeholder={isPollPost ? 'e.g. Which campus fest event is the best?' : "What's your post about?"}
+                    className="w-full bg-[#07080E] border border-[#232635] focus:border-coral rounded-xl py-2.5 px-3.5 text-xs text-white outline-none transition-all"
+                  />
+                </div>
+
+
+
+                <div>
+                  <label className="block text-xs font-semibold text-text-muted uppercase mb-1">Content / Context *</label>
+                  <textarea
+                    required
+                    rows={isPollPost ? 2 : 4}
+                    maxLength={500}
+                    value={teaserContent}
+                    onChange={(e) => setTeaserContent(e.target.value)}
+                    placeholder={isPollPost ? 'Add context or instructions for voters...' : 'Share details, thoughts, or ask a question...'}
+                    className="w-full bg-[#07080E] border border-[#232635] focus:border-coral rounded-xl py-2.5 px-3.5 text-xs text-white outline-none resize-none transition-all"
+                  />
+                </div>
+
+                {/* POLL OPTIONS CREATOR */}
+                {isPollPost && (
+                  <div className="space-y-3 bg-[#07080E] border border-[#232635] rounded-2xl p-3.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-coral uppercase font-mono">Poll Options</label>
+                      <span className="text-[10px] text-text-muted">Min 2, Max 5 options</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {pollOptions.map((option, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            required
+                            value={option}
+                            onChange={(e) => {
+                              const newOpts = [...pollOptions];
+                              newOpts[idx] = e.target.value;
+                              setPollOptions(newOpts);
+                            }}
+                            placeholder={`Option ${idx + 1}`}
+                            className="flex-1 bg-[#121422] border border-[#232635] focus:border-coral rounded-xl py-2 px-3 text-xs text-white outline-none"
+                          />
+                          {pollOptions.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                              className="p-1.5 text-rose-400 hover:text-rose-300 rounded-lg hover:bg-rose-500/10 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {pollOptions.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions([...pollOptions, ''])}
+                        className="w-full mt-1 py-1.5 border border-dashed border-[#232635] hover:border-coral/50 rounded-xl text-xs text-coral font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Option
+                      </button>
+                    )}
+
+                    {/* Poll Duration Timing Selector */}
+                    <div className="pt-2 border-t border-[#232635]">
+                      <label className="block text-[11px] font-bold text-coral uppercase mb-1.5 font-mono">Poll Timing / Duration</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: '8h', label: '8 Hours', detail: 'Active for 8h' },
+                          { id: '24h', label: '24 Hours', detail: 'Active for 24h' },
+                          { id: 'always', label: 'Always', detail: 'Always Active' }
+                        ].map((t) => {
+                          const isSelected = pollDuration === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setPollDuration(t.id as any)}
+                              className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                                isSelected 
+                                  ? 'bg-coral/20 border-coral text-coral shadow-md' 
+                                  : 'bg-[#121422] border-[#232635] text-text-muted hover:text-white'
+                              }`}
+                            >
+                              <span>{t.label}</span>
+                              <span className="text-[9px] font-mono font-normal opacity-80">{t.detail}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ANONYMOUS POSTING TOGGLE CARD */}
+                <div 
+                  onClick={() => setTeaserIsAnonymous(!teaserIsAnonymous)}
+                  className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer select-none ${
+                    teaserIsAnonymous 
+                      ? 'bg-coral/10 border-coral/50' 
+                      : 'bg-[#07080E] border-[#232635] hover:border-[#34384b]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🕵️</span>
+                    <div>
+                      <span className="text-xs font-bold text-white block">Post Anonymously</span>
+                      <span className="text-[10px] text-text-muted">Hide your name, handle, and profile link</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={teaserIsAnonymous}
+                    onChange={(e) => setTeaserIsAnonymous(e.target.checked)}
+                    className="w-4 h-4 accent-coral cursor-pointer"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+
+                {teaserPostError && (
+                  <p className="text-xs text-rose-400 font-mono font-bold">{teaserPostError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submittingTeaserPost || !teaserTitle.trim() || !teaserContent.trim()}
+                  className="w-full py-3.5 px-4 rounded-xl bg-coral hover:bg-coral-hover text-white text-xs font-bold transition-all shadow-lg shadow-coral/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>
+                    {submittingTeaserPost 
+                      ? 'Publishing...' 
+                      : isPollPost 
+                      ? (teaserIsAnonymous ? 'Publish Anonymous Poll 📊' : 'Publish Poll 📊')
+                      : (teaserIsAnonymous ? 'Publish Anonymous Post 🕵️' : 'Publish Post')}
+                  </span>
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+
+        {/* SECTION TITLE & FEATURE SHOWCASE (NOW BELOW TEASER POST) */}
+        <div className="text-center max-w-2xl mx-auto pt-6 space-y-2">
+          <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-fraunces">Everything You Need On Campus</h2>
+          <p className="text-xs text-text-muted">Preview the full platform experience coming on launch day.</p>
+        </div>
+
+        {/* FEATURES SHOWCASE */}
         <div id="features" className="w-full space-y-6 pt-2">
           
           {/* SLIDING DOTS & PREV / NEXT CONTROLS AT TOP OF SHOWCASE */}
@@ -914,63 +1242,7 @@ export default function TeaserPage() {
           </div>
         </div>
 
-        {/* SECTION TITLE (BELOW FEATURES SLIDER) */}
-        <div className="text-center max-w-2xl mx-auto pt-2">
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-fraunces">Everything You Need On Campus</h2>
-        </div>
 
-        {/* SELF-EXPLANATORY & CLEAN FOUNDING MEMBER SHOWCASE BOX */}
-        <div className="w-full max-w-sm sm:max-w-md mx-auto bg-[#0E101A]/90 border border-[#232635] rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xl backdrop-blur-md">
-          <div className="flex items-center justify-between border-b border-[#1A1D2C] pb-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-              <Award className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Founding Member Status</span>
-            </div>
-            <span className="text-[10px] font-mono text-amber-300/90 font-semibold bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
-              Top 100 Students
-            </span>
-          </div>
-
-          <p className="text-xs text-text-muted leading-relaxed">
-            Pre-registering locks your permanent <strong className="text-amber-300 font-mono">Founder #001–#100</strong> rank on your campus. Displayed on your profile forever with priority early launch access.
-          </p>
-
-          <div className="bg-[#07080E] border border-[#1C1F2E] rounded-xl p-3 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80" className="w-8 h-8 rounded-full object-cover border border-amber-400/40" />
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-white">Ananya Roy</span>
-                  <FoundingBadge badge={{ signup_number: 1, type: 'founder', icon: 'Founder', label: 'Founder #001', tooltip: 'First student' }} size="sm" />
-                </div>
-                <span className="text-[9.5px] text-text-muted font-mono">CSE '26 • Verified Student</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECURITY & PRIVACY ASSURANCE SECTION */}
-        <div className="w-full max-w-2xl bg-[#090A10] border border-[#232635] rounded-3xl p-5 sm:p-6 shadow-xl text-left grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal/10 border border-teal/30 flex items-center justify-center text-teal shrink-0 mt-0.5 shadow-md">
-              <ShieldCheck className="w-4.5 h-4.5" />
-            </div>
-            <div className="space-y-1">
-              <h5 className="text-xs sm:text-sm font-bold text-white">256-bit Academic Encryption</h5>
-              <p className="text-xs text-text-muted leading-relaxed">All student authentication & chats are protected with bank-grade SSL security.</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-coral/10 border border-coral/30 flex items-center justify-center text-coral shrink-0 mt-0.5 shadow-md">
-              <Lock className="w-4.5 h-4.5" />
-            </div>
-            <div className="space-y-1">
-              <h5 className="text-xs sm:text-sm font-bold text-white">Zero Data Selling Guarantee</h5>
-              <p className="text-xs text-text-muted leading-relaxed">Your student identity and anonymous posts are 100% private. Never shared or sold.</p>
-            </div>
-          </div>
-        </div>
 
         {/* GOOGLE LOGIN ONLY PRE-REGISTRATION CARD (VERY BOTTOM) */}
         <div id="register" className="w-full max-w-lg bg-[#0F1018] border border-[#232635] rounded-3xl p-6 sm:p-8 shadow-2xl relative space-y-6 scroll-mt-24">
@@ -1067,27 +1339,7 @@ export default function TeaserPage() {
                 )}
               </div>
 
-              {/* SLEEK GONE ROGUE STORY CARD GENERATOR CALLOUT */}
-              <div className="bg-gradient-to-br from-coral/20 via-[#121422] to-amber-500/10 border border-coral/40 rounded-2xl p-4 space-y-2.5 text-left shadow-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4.5 h-4.5 text-coral" />
-                    <h4 className="text-xs sm:text-sm font-extrabold text-white">Your Official Story Card</h4>
-                  </div>
-                  <span className="text-[9.5px] font-mono text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 font-bold">
-                    9:16 Story Ready
-                  </span>
-                </div>
-                <p className="text-[11px] text-text-muted leading-relaxed">
-                  Generate & download your personalized, ultra-cool <strong className="text-white font-mono">GONE ROGUE</strong> story card to share on Instagram & Snapchat!
-                </p>
-                <button
-                  onClick={() => setIsStoryModalOpen(true)}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-coral to-rose-600 hover:from-coral-hover hover:to-rose-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <ImageIcon className="w-4 h-4" /> Generate & Download Story Card
-                </button>
-              </div>
+
 
               {/* PERSONAL REFERRAL CODE & LINK HUB */}
               <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-4 sm:p-5 space-y-4">
@@ -1144,16 +1396,7 @@ export default function TeaserPage() {
                 </div>
               </div>
 
-              {/* SLEEK MATTE AMBASSADOR & CORE TEAM NOTE */}
-              <div className="bg-[#06070B] border border-[#1E2130] rounded-2xl p-4 text-left flex items-start gap-3">
-                <Crown className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-semibold text-white">Campus Ambassador & Core Team Opportunity</h4>
-                  <p className="text-[11px] text-text-muted leading-relaxed">
-                    Most active sharers get a direct opportunity to join the Rogue Core Admin Team & represent Rogue at their college.
-                  </p>
-                </div>
-              </div>
+
             </div>
           ) : (
             /* GOOGLE OAUTH ONLY SIGNUP */
@@ -1172,43 +1415,7 @@ export default function TeaserPage() {
                 </div>
               )}
 
-              {/* FIRST-TIME VISITOR STORY POSTER BUILDER CALLOUT */}
-              <div className="bg-gradient-to-br from-[#161828] via-[#0E101A] to-[#1a0f16] border border-[#FF5252]/40 rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xl relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#FF5252]" />
-                    <h4 className="text-xs sm:text-sm font-extrabold text-white">Create Custom @Handle Story Poster</h4>
-                  </div>
-                  <span className="text-[9.5px] font-mono text-[#FF5252] bg-[#FF5252]/10 px-2 py-0.5 rounded-full border border-[#FF5252]/30 font-bold">
-                    9:16 Ready
-                  </span>
-                </div>
 
-                <p className="text-[11.5px] text-text-muted leading-relaxed">
-                  Sign in with Google to build, customize & download your personalized <strong className="text-white">GONE ROGUE</strong> streetwear story poster with your reserved campus handle!
-                </p>
-
-                {/* PREVIEW THUMBNAILS OF THE 3 USER POSTERS */}
-                <div className="grid grid-cols-3 gap-2.5 pt-1 pb-1">
-                  <div className="relative rounded-xl overflow-hidden border border-white/20 aspect-[9/16] group cursor-pointer" onClick={handleGooglePreRegister}>
-                    <img src="/posters/poster_gone_rogue_full.jpg" alt="Rogue Crimson" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors" />
-                    <span className="absolute bottom-1 left-1 right-1 text-[8px] font-mono font-bold text-center text-white bg-black/80 py-0.5 rounded backdrop-blur-sm">Crimson</span>
-                  </div>
-                  
-                  <div className="relative rounded-xl overflow-hidden border border-white/20 aspect-[9/16] group cursor-pointer" onClick={handleGooglePreRegister}>
-                    <img src="/posters/poster_drift_red.jpg" alt="Red Drift" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors" />
-                    <span className="absolute bottom-1 left-1 right-1 text-[8px] font-mono font-bold text-center text-white bg-black/80 py-0.5 rounded backdrop-blur-sm">Drift Red</span>
-                  </div>
-
-                  <div className="relative rounded-xl overflow-hidden border border-white/20 aspect-[9/16] group cursor-pointer" onClick={handleGooglePreRegister}>
-                    <img src="/posters/poster_silver_full.jpg" alt="Silver Metallic" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors" />
-                    <span className="absolute bottom-1 left-1 right-1 text-[8px] font-mono font-bold text-center text-white bg-black/80 py-0.5 rounded backdrop-blur-sm">Silver</span>
-                  </div>
-                </div>
-              </div>
 
               {error && (
                 <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono">
@@ -1238,14 +1445,7 @@ export default function TeaserPage() {
                 )}
               </button>
 
-              {/* PRE-LOGIN COLLEGE EMAIL NUDGE */}
-              <div className="flex items-start gap-2 bg-amber-400/8 border border-amber-400/20 rounded-xl px-3 py-2.5 text-left">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-amber-200 leading-relaxed">
-                  <span className="font-bold text-amber-300">Tip:</span> Use your{' '}
-                  <span className="font-semibold text-amber-100">college email (mitsgwl.ac.in)</span> to get full verified access on launch day. Personal emails can register too but won't be verified.
-                </p>
-              </div>
+
 
             </div>
           )}
@@ -1254,16 +1454,7 @@ export default function TeaserPage() {
 
       </main>
 
-      {/* STICKY MOBILE BOTTOM FLOATING ACTION BAR */}
-      <div className="fixed bottom-3 left-3 right-3 z-50 md:hidden pointer-events-auto">
-        <button
-          onClick={scrollToRegister}
-          className="w-full py-3.5 px-4 rounded-2xl bg-coral text-white text-xs font-extrabold transition-all shadow-2xl shadow-coral/50 flex items-center justify-center gap-2 border border-white/20 active:scale-95"
-        >
-          <Zap className="w-4 h-4 fill-white shrink-0 animate-bounce" />
-          <span>Pre-Register Now</span>
-        </button>
-      </div>
+
 
       {/* FOOTER */}
       <footer className="max-w-6xl mx-auto w-full px-6 py-8 border-t border-[#232635]/60 flex flex-col sm:flex-row items-center justify-between text-xs text-text-muted gap-4 text-center sm:text-left">

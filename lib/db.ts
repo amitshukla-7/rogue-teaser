@@ -269,3 +269,108 @@ export async function getUserHandle(email: string): Promise<string | null> {
   return null;
 }
 
+export async function createTeaserPost(data: {
+  email: string;
+  name?: string;
+  title: string;
+  content: string;
+  topic?: string;
+  is_anonymous?: boolean;
+  poll?: any;
+}): Promise<any> {
+  const cleanEmail = data.email.trim().toLowerCase();
+  const cleanName = data.name?.trim() || cleanEmail.split('@')[0];
+  const cleanHandle = cleanEmail.split('@')[0].replace(/[^a-z0-9_]/g, '');
+  const postTitle = data.title.trim() || data.content.trim().slice(0, 60);
+  const postContent = data.content.trim() || postTitle;
+  const postTopic = data.topic || 'General';
+  const isAnon = !!data.is_anonymous;
+
+  if (pool) {
+    // 1. Enforce strict 1 post limit per email for all users
+    try {
+      const countRes = await pool.query(
+        `SELECT COUNT(*)::int AS count FROM posts p JOIN users u ON p.author_id::text = u.id::text WHERE LOWER(u.email) = $1`,
+        [cleanEmail]
+      );
+      if ((countRes.rows[0]?.count || 0) >= 1) {
+        throw new Error('You have already submitted your 1 teaser post! Additional posts can be created on launch day.');
+      }
+    } catch (err: any) {
+      if (err.message?.includes('already submitted')) throw err;
+    }
+
+    // 2. Ensure schema columns exist in PostgreSQL
+    try {
+      await pool.query(`
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS topic TEXT DEFAULT 'General';
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT false;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll JSONB;
+      `);
+    } catch (e) {}
+
+    // 3. Ensure user exists in users table
+    let userId = `user_${Date.now()}`;
+    try {
+      const userRes = await pool.query(
+        `INSERT INTO users (email, name, handle, college_verified)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT (email) DO UPDATE SET name = COALESCE(users.name, EXCLUDED.name)
+         RETURNING id`,
+        [cleanEmail, cleanName, cleanHandle]
+      );
+      if (userRes.rows[0]?.id) {
+        userId = userRes.rows[0].id;
+      }
+    } catch (e) {
+      const existing = await pool.query(`SELECT id FROM users WHERE LOWER(email) = $1`, [cleanEmail]);
+      if (existing.rows[0]?.id) userId = existing.rows[0].id;
+    }
+
+    // 4. Parse poll data if provided
+    let pollData = null;
+    if (data.poll && data.poll.question && Array.isArray(data.poll.options) && data.poll.options.length >= 2) {
+      const duration = data.poll.duration || 'always';
+      let expires_at: string | null = null;
+      if (duration === '8h') {
+        expires_at = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+      } else if (duration === '24h') {
+        expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      pollData = {
+        id: `poll-${Date.now()}`,
+        question: data.poll.question,
+        duration,
+        expires_at,
+        options: data.poll.options.map((opt: any, idx: number) => ({
+          id: `opt-${idx + 1}`,
+          text: typeof opt === 'string' ? opt.trim() : opt.text.trim(),
+          votes: 0
+        })),
+        total_votes: 0,
+        votes_by_user: {}
+      };
+    }
+
+    // 5. Insert post into PostgreSQL
+    const postId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO posts (id, author_id, title, content, topic, is_anonymous, poll, upvotes, downvotes, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 0, NOW())`,
+      [postId, userId, postTitle, postContent, postTopic, isAnon, pollData ? JSON.stringify(pollData) : null]
+    );
+
+    return {
+      id: postId,
+      title: postTitle,
+      content: postContent,
+      topic: postTopic,
+      is_anonymous: isAnon,
+      poll: pollData
+    };
+  }
+
+  return { id: `mock_${Date.now()}`, title: postTitle, content: postContent };
+}
+
