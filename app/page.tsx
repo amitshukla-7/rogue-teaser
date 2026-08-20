@@ -285,22 +285,18 @@ export default function TeaserPage() {
     setActiveSlide((prev) => (prev - 1 + TOTAL_SLIDES) % TOTAL_SLIDES);
   };
 
+  // CENTRALIZED LAUNCH TARGET TIMESTAMP (19 hours from Aug 20 18:09 IST -> Aug 21, 2026 13:09:06 IST)
+  // Shared across all devices so every visitor sees the exact same synchronized 19h countdown
+  const CENTRAL_LAUNCH_TARGET = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_LAUNCH_TIMESTAMP
+    ? parseInt(process.env.NEXT_PUBLIC_LAUNCH_TIMESTAMP, 10)
+    : new Date('2026-08-21T13:09:06+05:30').getTime();
+
   const calculateCountdown = () => {
-    let targetStr = typeof window !== 'undefined' ? localStorage.getItem('rogue_24h_countdown_target') : null;
-    let targetTime = targetStr ? parseInt(targetStr, 10) : 0;
-    
-    if (!targetTime || targetTime <= Date.now()) {
-      targetTime = Date.now() + 24 * 60 * 60 * 1000;
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('rogue_24h_countdown_target', String(targetTime));
-      }
-    }
-    
-    const difference = targetTime - Date.now();
+    const difference = CENTRAL_LAUNCH_TARGET - Date.now();
 
     if (difference > 0) {
-      const days = 0;
-      const hours = Math.floor(difference / (1000 * 60 * 60));
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((difference % (1000 * 60)) / 1000);
       setTimeLeft({ days, hours, minutes, seconds });
@@ -405,6 +401,15 @@ export default function TeaserPage() {
           <div className="h-3 w-[1px] bg-[#232635] hidden sm:block" />
 
           <div className="flex items-center gap-3 font-mono text-xs text-white font-medium">
+            {timeLeft.days > 0 && (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-sm sm:text-base font-bold text-white font-mono">{String(timeLeft.days).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-text-muted">d</span>
+                </div>
+                <span className="text-text-muted/40 font-bold">:</span>
+              </>
+            )}
             <div className="flex items-baseline gap-1">
               <span className="text-sm sm:text-base font-bold text-white font-mono">{String(timeLeft.hours).padStart(2, '0')}</span>
               <span className="text-[10px] text-text-muted">h</span>
